@@ -11,14 +11,233 @@
   elementTypeHolderClass="com.github.korniloval.matlab.psi.MatlabTypes"
   elementTypeClass="com.github.korniloval.matlab.psi.MatlabElementType"
   tokenTypeClass="com.github.korniloval.matlab.psi.MatlabTokenType"
+
+  tokens=[
+      NEWLINE='regexp:(\R( \t)*)+'
+      WHITE_SPACE='regexp:[ \t\x0B\f]+' // do not match new line
+      SINGLE_QUOTE="'"
+      FLOAT='regexp:(([\d]*\.[\d]+)|([\d]+\.))i?'
+      FLOAT_EXPONENTIAL='regexp:(([\d]*\.[\d]+)|([\d]+\.)|\d+)e[+-]?[\d]+i?'
+      FOR='for'
+      WHILE='while'
+      FUNCTION='function'
+      IDENTIFIER='regexp:[a-zA-Z][a-zA-Z0-9_]*'
+      INTEGER='regexp:[0-9]+i?'
+      DOTS='...'
+      DOT='.'
+      COMA=','
+      LPARENTH='('
+      RPARENTH=')'
+      LBRACKET='['
+      RBRACKET=']'
+      MUL='*'
+      DOT_MUL='.*'
+      RDIV='/'
+      DOT_RDIV='./'
+      LDIV='\'
+      DOT_LDIV='.\'
+      PLUS='+'
+      MINUS='-'
+      POW='^'
+      DOT_POW='.^'
+      ASSIGN='='
+      OR='||'
+      AND='&&'
+      MATRIX_OR='|'
+      MATRIX_AND='&'
+      EQUAL='=='
+      NOT_EQUAL='!='
+      LESS='<'
+      LESS_OR_EQUAL='<='
+      MORE='>'
+      MORE_OR_EQUAL='>='
+      COLON=':'
+      SEMICOLON=';'
+    ]
+
+    name(".*expr")='expression'
+    extends(".*expr")=expr
 }
 
-/* The grammar simply lists all tokens */
+root ::= NEWLINE * (element NEWLINE *) *
+private el ::= if_block | for_loop | while_loop | function_declaration | function_call | expr | COMMENT
+private element ::= ( el ';'? ) | ';' { recoverWhile=element_recover_rule }
 
-root ::= element *
-private element ::= ( NEWLINE | TRANSPOSE | LINE_COMMENT | FLOAT | FLOAT_EXPONENTIAL | IDENTIFIER | INTEGER | COMMENT |
-  FUNCTION | ELSEIF | ELSE | END | IF | FOR | WHILE | CLASSDEF | PROPERTIES | METHODS | LOAD |
-  SINGLE_QUOTE_STRING | DOUBLE_QUOTE_STRING | FILE_NAME | LPARENTH | RPARENTH | LESS_OR_EQUAL | MINUS |
-  PLUS | DOT_DELETE | DELETE | BACKSLASH | DOT_BACKSLASH | DOT_MUL | MUL | DOT_POW | POW | AND | MATRIX_AND | OR |
-  MATRIX_OR | DOT_TRANSPOSE | TILDA | ASSIGN | MORE_OR_EQUAL | MORE | LESS | EQUAL | NOT_EQUAL | COMA | COLON | SEMICOLON |
-  LBRACKET | RBRACKET | LBRACE | RBRACE | DOT )
+private element_recover_rule ::= !( end | elseif | else | el | NEWLINE | <<eof>> )
+
+private one_line_recovery ::= !( end | NEWLINE | '...' )
+
+if_block ::= if_token br* condition NEWLINE *
+  (if_block_element NEWLINE *) *
+  elseif_block* NEWLINE *
+  [else_block] NEWLINE *
+  end { pin=1 }
+
+condition ::= expr
+
+private if_token ::= if { recoverWhile = not_elseif_or_else_or_element }
+
+elseif_block ::= elseif_token NEWLINE * (if_block_element NEWLINE *) *
+private elseif_token ::= elseif { recoverWhile = not_elseif_or_else_or_element }
+private if_block_element ::= element { recoverWhile = not_elseif_or_else_or_element }
+else_block ::= else_token NEWLINE * (block_element NEWLINE *)*
+private else_token ::= else { recoverWhile = not_end_or_element }
+private block_element ::= element { recoverWhile = not_end_or_element }
+
+private not_elseif_or_else_or_element ::= one_line_recovery !( el | elseif | else )
+private not_end_or_element ::= !( el | end | NEWLINE )
+
+for_loop ::= for_token br* for_loop_interval NEWLINE*
+    (block_element NEWLINE *)*
+    end { pin=1 }
+private for_loop_interval ::= assign_expr { recoverWhile=not_end_or_element }
+private for_token ::= for { recoverWhile=not_element }
+
+private not_element ::= one_line_recovery !( el )
+
+while_loop ::= while_token br* while_loop_condition NEWLINE*
+    (block_element NEWLINE *)*
+    end { pin=1 }
+while_loop_condition ::= expr { pin=1 recoverWhile=not_end_or_element }
+private while_token ::= while { pin=1 recoverWhile=not_element }
+
+function_declaration ::= function_token br* return_value_part? br* function_name br* parameters? NEWLINE*
+    block_body
+    ( end | <<eof>> ) { pin=1 }
+private return_value_part ::= single_return_value_part  | multiple_return_values_part
+// note pin value
+private single_return_value_part ::= return_value br* '=' { pin=3 }
+private multiple_return_values_part ::= return_values br* '=' { pin=1 }
+block_body ::= (block_element NEWLINE *)* { recoverWhile=not_end }
+private not_end ::= !( end )
+private function_token ::= function { recoverWhile=not_element_or_squarebracket_or_equals }
+private not_element_or_squarebracket_or_equals ::= one_line_recovery !( el | '[' | '=' | IDENTIFIER )
+return_values ::= '[' br* return_values_list? br* ']' { pin=1 }
+private return_values_list ::= return_value_list_item (br* ',' br* return_value_list_item)* {recoverWhile=not_rbracket }
+private not_rbracket ::= one_line_recovery !( ']' )
+return_value_list_item ::= IDENTIFIER { recoverWhile=not_expr_or_coma_or_rbracket }
+private not_expr_or_coma_or_rbracket ::= !( ',' | ']' | '=' | IDENTIFIER | NEWLINE )
+return_value ::= IDENTIFIER { recoverWhile=not_expr_or_equal }
+private not_expr_or_equal ::=!( IDENTIFIER | expr | '=' | NEWLINE )
+function_name ::= IDENTIFIER { recoverWhile=not_element_or_lparenth }
+private not_element_or_lparenth ::= one_line_recovery !( el | '(' )
+parameters ::= '(' br* parameters_list? br* ')' { pin=1 }
+private parameters_list ::= parameter (br* ',' br* parameter)* { pin=1 recoverWhile=not_rparenth }
+private not_rparenth ::= one_line_recovery !( ')' )
+parameter ::= IDENTIFIER { recoverWhile=not_expr_or_coma_or_rparenth }
+
+ref ::= ( function_call | IDENTIFIER ) ('.' ref) *
+
+function_call ::= IDENTIFIER br* '(' br* arguments? br* ')' { pin=3 }
+arguments ::= argument ( br* ',' br* argument)* { recoverWhile=not_rparenth }
+argument ::= expr { recoverWhile=not_expr_or_coma_or_rparenth }
+private not_expr_or_coma_or_rparenth ::= one_line_recovery !( expr | ',' | ')' )
+
+expr ::= assign_group
+  | compare_group
+  | logic_group
+  | add_group
+  | mul_group
+  | unary_group
+  | primary_group
+
+private assign_group ::= assign_expr
+assign_expr ::= expr br* '=' br* expr { pin='=' rightAssociative=true }
+
+private compare_group ::= equal_expr
+  | not_equal_expr
+  | less_expr
+  | less_or_equal_expr
+  | more_expr
+  | more_or_equal_expr
+
+private logic_group ::= or_expr
+  | matrix_or_expr
+  | and_expr
+  | matrix_and_expr
+
+private unary_group ::= unary_plus_expr
+  | unary_min_expr
+  | transpose_expr
+  | nonconjugate_transpose_expr
+
+private mul_group ::= mul_expr
+  | element_wise_mul_expr
+  | rdiv_expr
+  | element_wise_rdiv_expr
+  | ldiv_expr
+  | element_wise_ldiv_expr
+  | pow_expr
+  | element_wise_pow_expr
+
+private add_group ::= plus_expr
+  | minus_expr
+
+private primary_group ::= literal_expr
+  | function_expr
+  | paren_expr
+  | ref_expr
+  | range_expr
+
+
+literal_expr ::= number_literal
+  | string_literal
+  | boolean_literal
+  | matrix_literal
+
+private number_literal ::= FLOAT | FLOAT_EXPONENTIAL | INTEGER
+private string_literal ::= DOUBLE_QUOTE_STRING | SINGLE_QUOTE_STRING
+private boolean_literal ::= TRUE | FALSE
+
+matrix_literal ::= '[' matrix_content? ']' { pin=1 }
+private matrix_content ::= matrix_row ( br* ';' br* matrix_row)* { recoverWhile=not_rbracket }
+matrix_row ::= matrix_item ( br* ','? br*  matrix_item)* { recoverWhile=not_rbracket_or_semicolon }
+private not_rbracket_or_semicolon ::= not_rbracket !( ';' )
+matrix_item ::= expr { recoverWhile=not_rbracket_or_semicolon_or_coma }
+private not_rbracket_or_semicolon_or_coma ::= not_rbracket_or_semicolon !( ',' | matrix_item)
+
+range_expr ::= expr ':' ( expr ':' )? expr
+
+function_expr ::= function_call
+
+paren_expr ::= '(' br* expr? br* ')' { pin=1 }
+
+// todo: check priority
+not_equal_expr ::= expr br* '!=' br* expr
+equal_expr ::= expr br* '==' br* expr
+less_expr ::= expr br* '<' br* expr
+less_or_equal_expr ::= expr br* '<=' br* expr
+more_expr ::= expr br* '>' br* expr
+more_or_equal_expr ::= expr br* '>=' br* expr
+
+// todo: check priority
+or_expr ::= expr br* '||' br* expr
+matrix_or_expr ::= expr br* '|' br* expr
+and_expr ::= expr br* '&&' br* expr
+matrix_and_expr ::= expr br* '&' br* expr
+
+ref_expr ::= ref
+unary_min_expr ::= '-' br* expr
+unary_plus_expr ::= '+' br* expr
+transpose_expr ::= expr br* TRANSPOSE
+nonconjugate_transpose_expr ::= expr br* DOT_TRANSPOSE
+
+rdiv_expr ::= expr '/' expr
+element_wise_rdiv_expr ::= expr './' expr
+ldiv_expr ::= expr '\' expr
+element_wise_ldiv_expr ::= expr '.\' expr
+mul_expr ::= expr br* '*' br* expr
+element_wise_mul_expr ::= expr br* '.*' br* expr
+pow_expr ::= expr br* '^' br* expr
+element_wise_pow_expr ::= expr br* '.^' br* expr
+
+minus_expr ::= expr br* '-' br* expr
+plus_expr ::= expr br* '+' br* expr
+
+private br ::= '...' NEWLINE { pin=1 }
+
+some_tokens ::= (CLASSDEF | PROPERTIES | METHODS | LOAD |
+                FILE_NAME |
+                TILDA | NOT_EQUAL |
+                LBRACE | RBRACE )
+

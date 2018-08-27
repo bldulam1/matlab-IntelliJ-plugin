@@ -80,6 +80,8 @@ SINGLE_QUOTE_EXCAPE_SEQUENCE=\\[\\bfnrt]|''
   properties            { isTranspose = false; return PROPERTIES; }
   methods               { isTranspose = false; return METHODS; }
   load/" "+[^ (]        { isTranspose = false; yybegin(FILE_NAME_STATE); return LOAD; }
+  true                  { return TRUE; }
+  false                 { return FALSE; }
 
   "("                   { isTranspose = false; return LPARENTH; }
   ")"                   { isTranspose = true; return RPARENTH; }
@@ -87,10 +89,10 @@ SINGLE_QUOTE_EXCAPE_SEQUENCE=\\[\\bfnrt]|''
   "<="                  { isTranspose = false; return LESS_OR_EQUAL; }
   "-"                   { isTranspose = false; return MINUS; }
   "+"                   { isTranspose = false; return PLUS; }
-  "./"                  { isTranspose = false; return DOT_DELETE; }
-  "/"                   { isTranspose = false; return DELETE; }
-  "\\"                  { isTranspose = false; return BACKSLASH; }
-  ".\\"                 { isTranspose = false; return DOT_BACKSLASH; }
+  "./"                  { isTranspose = false; return DOT_RDIV; }
+  "/"                   { isTranspose = false; return RDIV; }
+  "\\"                  { isTranspose = false; return LDIV; }
+  ".\\"                 { isTranspose = false; return DOT_LDIV; }
   ".*"                  { isTranspose = false; return DOT_MUL; }
   "*"                   { isTranspose = false; return MUL; }
   ".^"                  { isTranspose = false; return DOT_POW; }
@@ -115,6 +117,7 @@ SINGLE_QUOTE_EXCAPE_SEQUENCE=\\[\\bfnrt]|''
   "{"                   { isTranspose = false; return LBRACE; }
   "}"                   { isTranspose = false; return RBRACE; }
   "%{"                  { isTranspose = false; blockCommentLevel = 1; yybegin(BLOCKCOMMENT_STATE); }
+  "..."                 { isTranspose = false; return DOTS; }
   "."                   { isTranspose = false; return DOT; }
 
   {NEWLINE}             { isTranspose = false; return NEWLINE; }
